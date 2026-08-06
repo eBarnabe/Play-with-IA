@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>PONG-3D // TERMINAL</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:#0a0a0a;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    height:100vh; overflow:hidden;
+    font-family:'Share Tech Mono',monospace;
+    color:#00ff41;
+  }
+  #header {
+    font-family:'VT323',monospace; font-size:28px;
+    color:#00ff41; text-shadow:0 0 10px #00ff41,0 0 20px #00ff41;
+    letter-spacing:8px; margin-bottom:4px;
+  }
+  #scores {
+    display:flex; gap:40px; font-size:16px; margin-bottom:2px;
+    color:#39ff14; text-shadow:0 0 8px #39ff14; letter-spacing:2px;
+  }
+  #scores .val { color:#ff4400; }
+  canvas { display:block; border:1px solid #00ff4155;
+    box-shadow:0 0 30px #00ff4133, inset 0 0 30px #00000088; }
+  #status { margin-top:4px; font-size:13px; color:#00ff4199; letter-spacing:2px; height:18px; }
+  #mode-badge { font-size:12px; color:#ff440099; letter-spacing:2px; height:14px; margin-bottom:2px; }
+
+  .screen {
+    position:fixed; top:0;left:0;width:100%;height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:#0a0a0add; z-index:100; gap:20px;
+    font-family:'VT323',monospace;
+  }
+  .screen h1 { font-size:56px; color:#00ff41; text-shadow:0 0 20px #00ff41; letter-spacing:8px; }
+  .screen h2 { font-size:34px; color:#00ff41; text-shadow:0 0 15px #00ff41; letter-spacing:4px; }
+  .screen p  { font-size:20px; color:#39ff14bb; letter-spacing:3px; }
+  .screen input {
+    background:transparent; border:none; border-bottom:2px solid #00ff41;
+    color:#00ff41; font-family:'VT323',monospace; font-size:34px;
+    text-align:center; outline:none; width:320px; letter-spacing:4px;
+    text-shadow:0 0 8px #00ff41; padding:4px 0;
+  }
+  .screen input::placeholder { color:#00ff4144; }
+  .btn {
+    background:transparent; border:2px solid #00ff41;
+    color:#00ff41; font-family:'VT323',monospace; font-size:26px;
+    padding:10px 36px; letter-spacing:4px; cursor:pointer;
+    transition:all 0.2s; text-shadow:0 0 6px #00ff41;
+    box-shadow:0 0 10px #00ff4144;
+  }
+  .btn:hover { background:#00ff4122; box-shadow:0 0 22px #00ff4188; transform:scale(1.04); }
+  .btn.claude-btn { border-color:#ff4400; color:#ff4400; text-shadow:0 0 6px #ff4400; box-shadow:0 0 10px #ff440044; }
+  .btn.claude-btn:hover { background:#ff440022; box-shadow:0 0 22px #ff440088; }
+  .mode-row { display:flex; gap:24px; }
+  @keyframes blink { 50%{opacity:0;} }
+  .blink { animation:blink 0.9s step-end infinite; }
+  .scanlines {
+    position:fixed; top:0;left:0;width:100%;height:100%;
+    pointer-events:none; z-index:999;
+    background:repeating-linear-gradient(to bottom,transparent,transparent 2px,rgba(0,0,0,0.1) 2px,rgba(0,0,0,0.1) 4px);
+  }
+
+  /* PAUSE SCREEN */
+  #scr-pause {
+    position:fixed; top:0;left:0;width:100%;height:100%;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    background:#0a0a0acc; z-index:100; gap:24px;
+    font-family:'VT323',monospace;
+  }
+  #scr-pause h2 { font-size:52px; color:#ffff00; text-shadow:0 0 20px #ffff00; letter-spacing:8px; }
+  #scr-pause p { font-size:20px; color:#ffff0099; letter-spacing:3px; }
+</style>
+</head>
+<body>
+<div class="scanlines"></div>
+
+<!-- INTRO SCREEN -->
+<div class="screen" id="scr-intro">
+  <h1>&gt; PONG-3D &lt;</h1>
+  <p>ENTREZ VOTRE NOM :</p>
+  <input type="text" id="inp-name" placeholder="JOUEUR" maxlength="12" autocomplete="off" spellcheck="false"/>
+  <p style="font-size:15px;color:#00ff4155;">[ ENTRÉE ] POUR CONTINUER</p>
+</div>
+
+<!-- MODE SCREEN -->
+<div class="screen" id="scr-mode" style="display:none;">
+  <h2>CHOISISSEZ VOTRE ADVERSAIRE</h2>
+  <div class="mode-row">
+    <button class="btn" id="btn-cpu">🤖 CPU ALÉATOIRE</button>
+    <button class="btn claude-btn" id="btn-claude">🧠 JOUER CONTRE CLAUDE</button>
+  </div>
+  <p style="font-size:14px;color:#ff440077;letter-spacing:2px;">[ CLAUDE = IA AVANCÉE. BONNE CHANCE... ]</p>
+</div>
+
+<!-- GAMEOVER SCREEN -->
+<div class="screen" id="scr-over" style="display:none;">
+  <h2 id="over-title" class="blink">GAME OVER</h2>
+  <p id="over-score"></p>
+  <p id="over-msg" style="font-size:16px;letter-spacing:2px;"></p>
+  <div class="mode-row" style="margin-top:12px;">
+    <button class="btn" id="btn-replay">↺ REJOUER</button>
+    <button class="btn" id="btn-menu">⌂ MENU</button>
+  </div>
+</div>
+
+<!-- PAUSE SCREEN -->
+<div id="scr-pause">
+  <h2>⏸ PAUSE</h2>
+  <p>[ ESC ] REPRENDRE</p>
+  <button class="btn" id="btn-quit-pause" style="margin-top:8px;font-size:20px;border-color:#ff4400;color:#ff4400;text-shadow:0 0 6px #ff4400;">⌂ QUITTER LA PARTIE</button>
+</div>
+
+<div id="header">&gt;&gt; PONG-3D.EXE &lt;&lt;</div>
+<div id="scores">
+  <span id="pname-lbl">JOUEUR</span>: <span class="val" id="ps">0</span>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <span id="cname-lbl">CPU</span>: <span class="val" id="cs">0</span>
+</div>
+<div id="mode-badge"></div>
+<canvas id="c"></canvas>
+<div id="status"></div>
+
+<script>
+// ===== CANVAS SIZE =====
+const canvas = document.getElementById('c');
+// Make canvas fill most of the viewport
+const vpW = window.innerWidth, vpH = window.innerHeight;
+const headerH = 90; // approximate header+scores+badge+status height
+const canvasH = Math.min(vpH - headerH, Math.floor((vpW * 0.92) * 0.65));
+const canvasW = Math.min(Math.floor(canvasH / 0.65), Math.floor(vpW * 0.98));
+canvas.width = canvasW;
+canvas.height = canvasH;
+const W = canvasW, H = canvasH;
+const ctx = canvas.getContext('2d');
+
+const MAX_SCORE=5, TW=0.5, TD=1.0;
+
+// ===== AUDIO =====
+const AC=new(window.AudioContext||window.webkitAudioContext)();
+function beep(f,d,t='square',v=0.15,det=0,delay=0){
+  try{
+    const o=AC.createOscillator(),g=AC.createGain();
+    o.type=t; o.frequency.value=f; o.detune.value=det;
+    g.gain.setValueAtTime(0.001,AC.currentTime+delay);
+    g.gain.linearRampToValueAtTime(v,AC.currentTime+delay+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+delay+d);
+    o.connect(g);g.connect(AC.destination);
+    o.start(AC.currentTime+delay);
+    o.stop(AC.currentTime+delay+d+0.01);
+  }catch(e){}
+}
+const sndHit=()=>{beep(480,.07,'square',.18);beep(380,.07,'square',.08,50);};
+const sndWall=()=>beep(200,.06,'square',.12);
+const sndScore=()=>{beep(110,.3,'sawtooth',.25);setTimeout(()=>beep(160,.25,'sawtooth',.2),120);};
+
+// Musique d'intro : mélodie courte style 8-bit
+// Retourne la durée totale en ms
+function playIntroMusic(){
+  if(AC.state==='suspended') AC.resume();
+  const notes=[261,294,330,392,330,523,392,261];
+  const dur=0.18, gap=0.21;
+  notes.forEach((f,i)=>{ beep(f,dur,'square',0.15,0,i*gap); });
+  // durée = dernière note commence à (n-1)*gap, dure dur secondes
+  return Math.ceil(((notes.length-1)*gap + dur) * 1000);
+}
+
+// Musique game over : quelques notes descendantes tristes
+function playGameOverMusic(won){
+  if(AC.state==='suspended') AC.resume();
+  if(won){
+    // Victoire : fanfare montante
+    const notes=[330,392,523,659,784];
+    notes.forEach((f,i)=>beep(f,.22,'square',.18,0,i*.17));
+  } else {
+    // Défaite : descente lente
+    const notes=[330,294,261,220,196];
+    notes.forEach((f,i)=>beep(f,.28,'sawtooth',.18,0,i*.22));
+  }
+}
+
+// ===== ISO =====
+const ISO={ox:W/2,oy:H*.56,scale:Math.floor(W/4.28)};
+function iso(x,y,z){const a=Math.PI/6;return{x:ISO.ox+(x-z)*Math.cos(a)*ISO.scale,y:ISO.oy-(y*ISO.scale)+(x+z)*Math.sin(a)*ISO.scale};}
+
+// ===== PARTICLES =====
+let particles=[];
+function spawnParticles(px,pz,color,n=18){
+  const c=iso(px,.05,pz);
+  for(let i=0;i<n;i++){
+    const ang=Math.random()*Math.PI*2,spd=1.5+Math.random()*3.5;
+    particles.push({x:c.x,y:c.y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd-1.5,life:1,decay:.028+Math.random()*.04,size:1.5+Math.random()*3,color});
+  }
+}
+function updateParticles(){
+  particles=particles.filter(p=>p.life>0);
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.13;p.vx*=.97;p.life-=p.decay;});
+}
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.save();ctx.globalAlpha=p.life*.85;
+    ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=5;
+    ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+    ctx.restore();
+  });
+}
+
+// ===== CPU NAMES =====
+const CPU_NAMES=['R0B0T','TERMINATOR','GLaDOS','HAL-9000','SKYNET','MEGABYTE','T-800','MATRIX-X','KOLOSSUS','CEREBRO','DEEPMIND','CYPHER', 'QUENTIN MAREST'];
+const randCpuName=()=>CPU_NAMES[Math.floor(Math.random()*CPU_NAMES.length)];
+
+// ===== GAME STATE =====
+let state='intro', playerName='JOUEUR', cpuName='CPU', mode='cpu';
+let playerScore=0, cpuScore=0;
+let ball={x:0,z:0,vx:0,vz:0,r:.04,spin:0};
+let playerPaddle={x:0,z:TD-.05,w:.22,prevX:0};
+let cpuPaddle={x:0,z:-TD+.05,w:.22,prevX:0};
+let keys={}, frame=0;
+let claudeTarget=0, claudeDelay=0, claudeFake=0;
+
+function resetBall(toPlayer=true){
+  ball.x=(Math.random()-.5)*.3; ball.z=0; ball.spin=0;
+  const s=.011; ball.vx=(Math.random()-.5)*.01;
+  ball.vz=toPlayer?s:-s;
+}
+
+function startGame(){
+  playerScore=0;cpuScore=0;particles=[];frame=0;
+  resetBall(true);
+  playerPaddle.x=0;playerPaddle.prevX=0;
+  cpuPaddle.x=0;cpuPaddle.prevX=0;
+  claudeTarget=0;claudeDelay=0;claudeFake=0;
+  state='countdown';
+  document.getElementById('scr-over').style.display='none';
+  document.getElementById('scr-pause').style.display='none';
+  document.getElementById('ps').textContent='0';
+  document.getElementById('cs').textContent='0';
+  document.getElementById('pname-lbl').textContent=playerName;
+  document.getElementById('cname-lbl').textContent=cpuName;
+  document.getElementById('mode-badge').textContent=mode==='claude'?'[ MODE : CLAUDE AI — ADVERSAIRE REDOUTABLE ]':'';
+  const musicDuration = playIntroMusic();
+  setTimeout(()=>{ if(state==='countdown') state='playing'; }, musicDuration);
+}
+
+// ===== DRAW =====
+function drawTable(){
+  const corners=[[-TW,0,-TD],[TW,0,-TD],[TW,0,TD],[-TW,0,TD]].map(([x,y,z])=>iso(x,y,z));
+  ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.forEach(c=>ctx.lineTo(c.x,c.y));ctx.closePath();
+  ctx.fillStyle='#011a06';ctx.fill();
+  // grid
+  ctx.strokeStyle='#00ff4118';ctx.lineWidth=.5;
+  for(let z=-TD;z<=TD;z+=.2){const a=iso(-TW,0,z),b=iso(TW,0,z);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  for(let x=-TW;x<=TW;x+=.2){const a=iso(x,0,-TD),b=iso(x,0,TD);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  // border
+  ctx.strokeStyle='#00ff41';ctx.lineWidth=2;ctx.shadowColor='#00ff41';ctx.shadowBlur=8;
+  ctx.beginPath();ctx.moveTo(corners[0].x,corners[0].y);corners.forEach(c=>ctx.lineTo(c.x,c.y));ctx.closePath();ctx.stroke();
+  ctx.shadowBlur=0;
+  // net
+  const NH=.07;
+  const np=[iso(-TW,0,0),iso(TW,0,0),iso(TW,NH,0),iso(-TW,NH,0)];
+  ctx.fillStyle='#00ff4133';ctx.beginPath();np.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#00ff4166';ctx.lineWidth=.7;ctx.shadowColor='#00ff41';ctx.shadowBlur=3;
+  for(let h=0;h<=NH;h+=.014){const a=iso(-TW,h,0),b=iso(TW,h,0);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  for(let x=-TW;x<=TW;x+=.045){const a=iso(x,0,0),b=iso(x,NH,0);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  ctx.shadowBlur=0;
+  ctx.strokeStyle='#00ff41';ctx.lineWidth=2.5;ctx.shadowBlur=12;
+  const na=iso(-TW,NH,0),nb=iso(TW,NH,0);ctx.beginPath();ctx.moveTo(na.x,na.y);ctx.lineTo(nb.x,nb.y);ctx.stroke();
+  ctx.shadowBlur=0;
+}
+
+function drawPaddle(px,pz,pw,isPlayer){
+  const ph=.045,depth=.05,x0=px-pw/2,x1=px+pw/2;
+  const col=isPlayer?'#00ff41':(mode==='claude'?'#ff4400':'#39ff14');
+  const tl=iso(x0,ph,pz-depth/2),tr=iso(x1,ph,pz-depth/2);
+  const br=iso(x1,ph,pz+depth/2),bl=iso(x0,ph,pz+depth/2);
+  const bl0=iso(x0,0,pz+depth/2),br0=iso(x1,0,pz+depth/2);
+  ctx.fillStyle=col+'22';ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.shadowColor=col;ctx.shadowBlur=14;
+  ctx.beginPath();[tl,tr,br,bl].forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.beginPath();[bl,br,br0,bl0].forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.shadowBlur=0;
+  // No name on paddle — removed
+}
+
+function drawBall(){
+  const BY=.05,center=iso(ball.x,BY,ball.z),shadow=iso(ball.x,.002,ball.z);
+  ctx.beginPath();ctx.ellipse(shadow.x,shadow.y,ball.r*ISO.scale*1.3,ball.r*ISO.scale*.5,-Math.PI/6,0,Math.PI*2);
+  ctx.fillStyle='#00ff4118';ctx.fill();
+  const r=ball.r*ISO.scale*.75;
+  const grad=ctx.createRadialGradient(center.x-r*.3,center.y-r*.3,r*.1,center.x,center.y,r);
+  grad.addColorStop(0,'#aaffcc');grad.addColorStop(.4,'#00ff41');grad.addColorStop(1,'#004411');
+  ctx.beginPath();ctx.arc(center.x,center.y,r,0,Math.PI*2);
+  ctx.fillStyle=grad;ctx.shadowColor='#00ff41';ctx.shadowBlur=22;ctx.fill();ctx.shadowBlur=0;
+  if(Math.abs(ball.spin)>.002){
+    const tc=iso(ball.x-ball.spin*.15,BY,ball.z-ball.vz*8);
+    ctx.beginPath();ctx.moveTo(center.x,center.y);ctx.lineTo(tc.x,tc.y);
+    ctx.strokeStyle='#00ff4155';ctx.lineWidth=2;ctx.stroke();
+  }
+}
+
+function drawLabels(){
+  ctx.font="11px 'Share Tech Mono'";ctx.fillStyle='#00ff4155';ctx.textAlign='center';
+  const pl=iso(0,0,TD+.1),cl=iso(0,0,-TD-.1);
+  ctx.fillText('▲ '+playerName,pl.x,pl.y);
+  ctx.fillText('▲ '+cpuName,cl.x,cl.y);
+}
+
+// ===== AI =====
+function updateCPU(){
+  if(mode==='claude'){
+    claudeDelay--;
+    if(claudeDelay<=0){
+      claudeDelay=3;
+      if(ball.vz<0){
+        const t=Math.abs((ball.z-cpuPaddle.z)/ball.vz);
+        let px=ball.x+ball.vx*t+ball.spin*t*t*.5;
+        if(px<-TW)px=-TW*2-px; if(px>TW)px=TW*2-px;
+        claudeTarget=px;
+        if(Math.random()<.025)claudeFake=(Math.random()-.5)*.25;
+        else claudeFake*=.88;
+      } else { claudeFake*=.92; }
+    }
+    const spd=.017,diff=(claudeTarget+claudeFake*.3)-cpuPaddle.x;
+    cpuPaddle.prevX=cpuPaddle.x;
+    cpuPaddle.x=Math.max(-TW+cpuPaddle.w/2,Math.min(TW-cpuPaddle.w/2,cpuPaddle.x+Math.sign(diff)*Math.min(Math.abs(diff),spd)));
+  } else {
+    const spd=.009;
+    cpuPaddle.prevX=cpuPaddle.x;
+    if(cpuPaddle.x<ball.x-.015)cpuPaddle.x=Math.min(TW-cpuPaddle.w/2,cpuPaddle.x+spd);
+    if(cpuPaddle.x>ball.x+.015)cpuPaddle.x=Math.max(-TW+cpuPaddle.w/2,cpuPaddle.x-spd);
+  }
+}
+
+// ===== UPDATE =====
+function update(){
+  if(state!=='playing')return;
+  // 'countdown' state: game frozen, ball/paddles don't move
+  playerPaddle.prevX=playerPaddle.x;
+  if(keys['ArrowLeft'])  playerPaddle.x=Math.max(-TW+playerPaddle.w/2,playerPaddle.x-.016);
+  if(keys['ArrowRight']) playerPaddle.x=Math.min( TW-playerPaddle.w/2,playerPaddle.x+.016);
+  updateCPU();
+  ball.spin*=.99; ball.vx+=ball.spin*.003;
+  ball.x+=ball.vx; ball.z+=ball.vz;
+  // walls
+  if(ball.x-ball.r<-TW){ball.x=-TW+ball.r;ball.vx*=-1;ball.spin*=-.7;sndWall();spawnParticles(ball.x,ball.z,'#00aaff',8);}
+  if(ball.x+ball.r> TW){ball.x= TW-ball.r;ball.vx*=-1;ball.spin*=-.7;sndWall();spawnParticles(ball.x,ball.z,'#00aaff',8);}
+  // player paddle hit
+  if(ball.vz>0&&ball.z+ball.r>=playerPaddle.z-.027&&ball.z-ball.r<=playerPaddle.z+.027&&ball.x>=playerPaddle.x-playerPaddle.w/2&&ball.x<=playerPaddle.x+playerPaddle.w/2){
+    ball.z=playerPaddle.z-.027-ball.r;
+    const off=(ball.x-playerPaddle.x)/(playerPaddle.w/2);
+    ball.spin=(playerPaddle.x-playerPaddle.prevX)*.4;
+    ball.vx=off*.016+ball.spin*.5;
+    ball.vz*=-1.06;ball.vz=Math.max(-.028,Math.min(-.009,ball.vz));
+    sndHit();spawnParticles(ball.x,ball.z,'#00ff41',24);
+  }
+  // cpu paddle hit
+  if(ball.vz<0&&ball.z-ball.r<=cpuPaddle.z+.027&&ball.z+ball.r>=cpuPaddle.z-.027&&ball.x>=cpuPaddle.x-cpuPaddle.w/2&&ball.x<=cpuPaddle.x+cpuPaddle.w/2){
+    ball.z=cpuPaddle.z+.027+ball.r;
+    const off=(ball.x-cpuPaddle.x)/(cpuPaddle.w/2);
+    ball.spin=(cpuPaddle.x-cpuPaddle.prevX)*.4;
+    ball.vx=off*.016+ball.spin*.5;
+    ball.vz*=-1.06;ball.vz=Math.min(.028,Math.max(.009,ball.vz));
+    sndHit();spawnParticles(ball.x,ball.z,mode==='claude'?'#ff4400':'#39ff14',24);
+  }
+  // score
+  if(ball.z>TD+.12){cpuScore++;document.getElementById('cs').textContent=cpuScore;sndScore();if(cpuScore>=MAX_SCORE){endGame(false);return;}resetBall(true);}
+  if(ball.z<-TD-.12){playerScore++;document.getElementById('ps').textContent=playerScore;sndScore();if(playerScore>=MAX_SCORE){endGame(true);return;}resetBall(false);}
+  updateParticles();
+}
+
+function endGame(playerWon){
+  state='gameover';
+  const ot=document.getElementById('over-title'),os=document.getElementById('over-score'),om=document.getElementById('over-msg');
+  if(playerWon){
+    ot.textContent='🏆 '+playerName+' GAGNE !';
+    ot.style.color='#00ff41';ot.style.textShadow='0 0 20px #00ff41';
+    om.textContent=mode==='claude'?'TU AS BATTU CLAUDE... VRAIMENT IMPRESSIONNANT.':'FÉLICITATIONS, BRAVO !';
+  } else {
+    ot.textContent=(mode==='claude'?'🧠 CLAUDE':'🤖 '+cpuName)+' GAGNE !';
+    ot.style.color='#ff4400';ot.style.textShadow='0 0 20px #ff4400';
+    om.textContent=mode==='claude'?'CLAUDE VOUS REMERCIE DE CETTE PARTIE. REVANCHEZ-VOUS ! 😏':'MEILLEURE CHANCE LA PROCHAINE FOIS !';
+  }
+  os.textContent=playerName+' '+playerScore+' — '+cpuScore+' '+cpuName;
+  document.getElementById('scr-over').style.display='flex';
+  setTimeout(()=>playGameOverMusic(playerWon), 200);
+}
+
+// ===== PAUSE =====
+function togglePause(){
+  if(state==='playing'){
+    state='paused';
+    document.getElementById('scr-pause').style.display='flex';
+  } else if(state==='paused'){
+    state='playing';
+    document.getElementById('scr-pause').style.display='none';
+  }
+}
+
+function quitToMenu(){
+  state='intro';
+  document.getElementById('scr-pause').style.display='none';
+  document.getElementById('scr-over').style.display='none';
+  document.getElementById('scr-intro').style.display='flex';
+  document.getElementById('inp-name').value=playerName;
+}
+
+// ===== RENDER =====
+function render(){
+  requestAnimationFrame(render);frame++;
+  ctx.clearRect(0,0,W,H);ctx.fillStyle='#050d07';ctx.fillRect(0,0,W,H);
+  const v=ctx.createRadialGradient(W/2,H/2,H*.2,W/2,H/2,H*.85);
+  v.addColorStop(0,'transparent');v.addColorStop(1,'rgba(0,0,0,.65)');
+  ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+  drawTable();drawLabels();
+  if(state==='playing'||state==='gameover'||state==='paused'||state==='countdown'){
+    drawParticles();
+    drawPaddle(cpuPaddle.x,cpuPaddle.z,cpuPaddle.w,false);
+    drawBall();
+    drawPaddle(playerPaddle.x,playerPaddle.z,playerPaddle.w,true);
+  }
+  // GET READY overlay during countdown
+  if(state==='countdown'){
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,0.45)';
+    ctx.fillRect(0,0,W,H);
+    ctx.font="bold "+Math.floor(H*0.13)+"px 'VT323',monospace";
+    ctx.textAlign='center';
+    ctx.shadowColor='#00ff41';
+    ctx.shadowBlur=30;
+    ctx.fillStyle= (Math.floor(frame/8)%2===0)?'#00ff41':'#39ff14';
+    ctx.fillText('GET READY !', W/2, H/2);
+    ctx.restore();
+  }
+  update();
+  const st=document.getElementById('status');
+  if(state==='playing')st.textContent=frame%70<35?'> ← → DÉPLACER | SPIN SELON VITESSE DE FRAPPE':'> PREMIER À '+MAX_SCORE+' POINTS GAGNE | [ ESC ] PAUSE_';
+  else if(state==='countdown')st.textContent='♪ MÉLODIE EN COURS...';
+  else if(state==='paused')st.textContent='';
+}
+
+// ===== UI =====
+const inpName=document.getElementById('inp-name');
+inpName.focus();
+inpName.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    playerName=inpName.value.trim().toUpperCase()||'JOUEUR';
+    document.getElementById('scr-intro').style.display='none';
+    document.getElementById('scr-mode').style.display='flex';
+  }
+});
+document.getElementById('btn-cpu').addEventListener('click',()=>{
+  if(AC.state==='suspended')AC.resume();
+  mode='cpu';cpuName=randCpuName();
+  document.getElementById('scr-mode').style.display='none';
+  startGame();
+});
+document.getElementById('btn-claude').addEventListener('click',()=>{
+  if(AC.state==='suspended')AC.resume();
+  mode='claude';cpuName='CLAUDE';
+  document.getElementById('scr-mode').style.display='none';
+  startGame();
+});
+document.getElementById('btn-replay').addEventListener('click',()=>{
+  if(AC.state==='suspended')AC.resume();
+  startGame();
+});
+document.getElementById('btn-menu').addEventListener('click',()=>quitToMenu());
+document.getElementById('btn-quit-pause').addEventListener('click',()=>quitToMenu());
+
+document.addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(AC.state==='suspended')AC.resume();
+  if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();
+  if(e.key==='Escape'){
+    e.preventDefault();
+    if(state==='playing'||state==='paused') togglePause();
+  }
+});
+document.addEventListener('keyup',e=>{keys[e.key]=false;});
+render();
+</script>
+</body>
+</html>
