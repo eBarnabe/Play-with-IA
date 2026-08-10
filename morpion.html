@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morpion contre l'IA</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .score-board {
+            display: flex;
+            gap: 20px;
+            font-size: 1.1rem;
+            background: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .score-player { color: #3498db; }
+        .score-ai { color: #e74c3c; }
+
+        #status {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            font-weight: bold;
+            color: #555;
+            height: 30px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            background-color: #ccc;
+            padding: 5px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .cell {
+            background-color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 2.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .cell:hover {
+            background-color: #e8e8e8;
+        }
+
+        .cell:active {
+            transform: scale(0.95);
+        }
+
+        .cell.X {
+            color: #3498db;
+        }
+
+        .cell.O {
+            color: #e74c3c;
+        }
+
+        #reset {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        #reset:hover {
+            background-color: #27ae60;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Morpion vs IA</h1>
+    
+    <div class="score-board">
+        <span class="score-player">Joueur : <span id="score-player">0</span></span>
+        <span>•</span>
+        <span class="score-ai">Ordinateur : <span id="score-ai">0</span></span>
+    </div>
+
+    <div id="status">À vous de jouer (X)</div>
+
+    <div class="board">
+        <button class="cell" id="c0"></button>
+        <button class="cell" id="c1"></button>
+        <button class="cell" id="c2"></button>
+        <button class="cell" id="c3"></button>
+        <button class="cell" id="c4"></button>
+        <button class="cell" id="c5"></button>
+        <button class="cell" id="c6"></button>
+        <button class="cell" id="c7"></button>
+        <button class="cell" id="c8"></button>
+    </div>
+
+    <button id="reset">Recommencer</button>
+
+    <script>
+        const cells = document.querySelectorAll('.cell');
+        const statusText = document.getElementById('status');
+        const resetButton = document.getElementById('reset');
+        const scorePlayerText = document.getElementById('score-player');
+        const scoreAiText = document.getElementById('score-ai');
+
+        let currentPlayer = 'X'; 
+        let isGameActive = true;
+        let scorePlayer = 0;
+        let scoreAi = 0;
+
+        function getVal(index) {
+            return document.getElementById("c" + index).textContent;
+        }
+
+        function checkLine(i1, i2, i3) {
+            const v1 = getVal(i1);
+            const v2 = getVal(i2);
+            const v3 = getVal(i3);
+            if (v1 !== "" && v1 === v2 && v2 === v3) {
+                return v1;
+            }
+            return null;
+        }
+
+        function getWinner() {
+            return checkLine(0, 1, 2) || checkLine(3, 4, 5) || checkLine(6, 7, 8) || 
+                   checkLine(0, 3, 6) || checkLine(1, 4, 7) || checkLine(2, 5, 8) || 
+                   checkLine(0, 4, 8) || checkLine(2, 4, 6);
+        }
+
+        function checkThreatOrWin(i1, i2, i3, player) {
+            const v1 = getVal(i1);
+            const v2 = getVal(i2);
+            const v3 = getVal(i3);
+            
+            let count = 0;
+            if (v1 === player) count++;
+            if (v2 === player) count++;
+            if (v3 === player) count++;
+
+            let emptyCount = 0;
+            if (v1 === "") emptyCount++;
+            if (v2 === "") emptyCount++;
+            if (v3 === "") emptyCount++;
+
+            if (count === 2 && emptyCount === 1) {
+                if (v1 === "") return i1;
+                if (v2 === "") return i2;
+                if (v3 === "") return i3;
+            }
+            return null;
+        }
+
+        function findStrategicMove(player) {
+            return checkThreatOrWin(0, 1, 2, player) ?? checkThreatOrWin(3, 4, 5, player) ?? checkThreatOrWin(6, 7, 8, player) ??
+                   checkThreatOrWin(0, 3, 6, player) ?? checkThreatOrWin(1, 4, 7, player) ?? checkThreatOrWin(2, 5, 8, player) ??
+                   checkThreatOrWin(0, 4, 8, player) ?? checkThreatOrWin(2, 4, 6, player);
+        }
+
+        function handleCellClick(e) {
+            const clickedCell = e.target;
+
+            // Bloque si la case est déjà prise, si le jeu est fini, ou si c'est le tour de l'IA
+            if (clickedCell.textContent !== "" || !isGameActive || currentPlayer === 'O') {
+                return;
+            }
+
+            makeMove(clickedCell, 'X');
+
+            if (isGameActive) {
+                currentPlayer = 'O';
+                statusText.textContent = "L'ordinateur réfléchit...";
+                setTimeout(computerMove, 400); 
+            }
+        }
+
+        function computerMove() {
+            if (!isGameActive) return;
+
+            let bestMove = findStrategicMove('O');
+
+            if (bestMove === null) {
+                bestMove = findStrategicMove('X');
+            }
+
+            if (bestMove === null && getVal(4) === "") {
+                bestMove = 4;
+            }
+
+            if (bestMove === null) {
+                if (getVal(0) === "") bestMove = 0;
+                else if (getVal(2) === "") bestMove = 2;
+                else if (getVal(6) === "") bestMove = 6;
+                else if (getVal(8) === "") bestMove = 8;
+            }
+
+            if (bestMove === null) {
+                for (let i = 0; i < 9; i++) {
+                    if (getVal(i) === "") {
+                        bestMove = i;
+                        break;
+                    }
+                }
+            }
+
+            if (bestMove !== null) {
+                const cellToPlay = document.getElementById("c" + bestMove);
+                makeMove(cellToPlay, 'O');
+                
+                if (isGameActive) {
+                    currentPlayer = 'X';
+                    statusText.textContent = "À vous de jouer (X)";
+                }
+            }
+        }
+
+        function makeMove(cell, player) {
+            cell.textContent = player;
+            cell.classList.add(player);
+            checkResult();
+        }
+
+        function checkResult() {
+            const winner = getWinner();
+
+            if (winner) {
+                isGameActive = false;
+                if (winner === 'X') {
+                    scorePlayer++;
+                    scorePlayerText.textContent = scorePlayer;
+                    statusText.textContent = "Victoire du Joueur !";
+                    setTimeout(() => { alert("🎉 Félicitations, vous avez gagné la partie !"); }, 50);
+                } else {
+                    scoreAi++;
+                    scoreAiText.textContent = scoreAi;
+                    statusText.textContent = "L'ordinateur a gagné !";
+                    setTimeout(() => { alert("🤖 L'ordinateur a gagné cette manche !"); }, 50);
+                }
+                return;
+            }
+
+            let isDraw = true;
+            for (let i = 0; i < 9; i++) {
+                if (getVal(i) === "") {
+                    isDraw = false;
+                    break;
+                }
+            }
+
+            if (isDraw) {
+                statusText.textContent = "Match nul !";
+                isGameActive = false;
+                setTimeout(() => { alert("🤝 Match nul !"); }, 50);
+            }
+        }
+
+        function resetGame() {
+            currentPlayer = 'X';
+            isGameActive = true;
+            statusText.textContent = "À vous de jouer (X)";
+            cells.forEach(cell => {
+                cell.textContent = "";
+                cell.classList.remove('X', 'O');
+            });
+        }
+
+        cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+        resetButton.addEventListener('click', resetGame);
+    </script>
+</body>
+</html>
