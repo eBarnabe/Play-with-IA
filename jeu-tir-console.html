@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>JEU DE TIR // MODE CONSOLE</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #000; color: #fff;
+    font-family: "Courier New", Courier, monospace;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #wrap {
+    position: relative;
+    box-shadow: 0 0 0 2px #fff, 0 0 30px rgba(255,255,255,0.15);
+  }
+  canvas {
+    display: block;
+    background: #000;
+  }
+  #scanlines {
+    position: absolute; top:0; left:0; right:0; bottom:0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.03) 0px,
+      rgba(255,255,255,0.03) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+  .hud {
+    position: absolute;
+    top: 10px; left: 0; right: 0;
+    display: flex; justify-content: space-between;
+    padding: 0 16px;
+    font-size: 16px;
+    letter-spacing: 2px;
+    pointer-events: none;
+    text-shadow: 0 0 6px #fff;
+  }
+  #overlay {
+    position: absolute; top:0; left:0; right:0; bottom:0;
+    background: rgba(0,0,0,0.88);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    gap: 18px;
+  }
+  #overlay h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 4px;
+    text-shadow: 0 0 8px #fff;
+  }
+  #overlay p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.7;
+    max-width: 440px;
+    opacity: 0.9;
+  }
+  #overlay button {
+    font-family: inherit;
+    font-size: 15px;
+    letter-spacing: 2px;
+    background: #000;
+    color: #fff;
+    border: 2px solid #fff;
+    padding: 10px 22px;
+    cursor: pointer;
+  }
+  #overlay button:hover {
+    background: #fff;
+    color: #000;
+  }
+  .blink {
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="800" height="600"></canvas>
+  <div id="scanlines"></div>
+  <div class="hud">
+    <span id="hud-score">CIBLES: 0/0</span>
+    <span id="hud-timer">TEMPS: 60</span>
+  </div>
+  <div id="overlay">
+    <h1>JEU DE TIR // MODE CONSOLE</h1>
+    <p>
+      &lt;&lt; DEPLACEMENT : FLECHES GAUCHE / DROITE &gt;&gt;<br>
+      &lt;&lt; TIR : BARRE D'ESPACE &gt;&gt;<br><br>
+      Detruisez tous les vaisseaux ennemis avant la fin du chronometre (60s).<br>
+      Attention, ils accelerent avec le temps.
+    </p>
+    <button id="btn-start">APPUYEZ POUR COMMENCER</button>
+    <p class="blink" id="hint-key">( ou appuyez sur ESPACE )</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const overlay = document.getElementById('overlay');
+  const btnStart = document.getElementById('btn-start');
+  const hintKey = document.getElementById('hint-key');
+  const hudScore = document.getElementById('hud-score');
+  const hudTimer = document.getElementById('hud-timer');
+
+  // ---------- AUDIO ----------
+  let actx = null;
+  function ensureAudio(){
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  function playTone(freq, duration, type, vol, glideTo){
+    if (!actx) return;
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, actx.currentTime);
+    if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, actx.currentTime + duration);
+    gain.gain.setValueAtTime(vol || 0.15, actx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + duration);
+    osc.connect(gain).connect(actx.destination);
+    osc.start();
+    osc.stop(actx.currentTime + duration);
+  }
+
+  function playShoot(){
+    playTone(900, 0.12, 'sawtooth', 0.12, 220);
+  }
+
+  let stepToggle = false;
+  function playEnemyStep(){
+    stepToggle = !stepToggle;
+    playTone(stepToggle ? 130 : 95, 0.07, 'square', 0.07);
+  }
+
+  function playExplosion(){
+    if (!actx) return;
+    const bufferSize = actx.sampleRate * 0.25;
+    const buffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++){
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    }
+    const noise = actx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = actx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1200, actx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(120, actx.currentTime + 0.25);
+    const gain = actx.createGain();
+    gain.gain.setValueAtTime(0.35, actx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.25);
+    noise.connect(filter).connect(gain).connect(actx.destination);
+    noise.start();
+  }
+
+  // ---------- GAME STATE ----------
+  const STATE = { START:'start', PLAYING:'playing', WIN:'win', LOSE:'lose' };
+  let state = STATE.START;
+
+  const GAME_DURATION = 60; // seconds
+  let timeLeft = GAME_DURATION;
+  let lastTime = 0;
+
+  const player = { w: 26, h: 22, x: W/2 - 13, y: H - 50, speed: 7 };
+  let keys = { left:false, right:false, space:false };
+
+  let missiles = []; // {x,y}
+  const MISSILE_SPEED = 9;
+  let missileCooldown = 0;
+
+  let enemies = [];
+  let enemyDir = 1;
+  let baseEnemySpeed = 1.0;
+  let elapsed = 0;
+  let stepTimer = 0;
+
+  let totalEnemies = 0;
+
+  function initEnemies(){
+    enemies = [];
+    const rows = 3, cols = 7;
+    const marginX = 90, marginY = 60;
+    const gapX = (W - marginX*2) / (cols-1);
+    const gapY = 40;
+    for (let r=0;r<rows;r++){
+      for (let c=0;c<cols;c++){
+        enemies.push({
+          x: marginX + c*gapX,
+          y: marginY + r*gapY,
+          w: 22, h: 16,
+          alive: true
+        });
+      }
+    }
+    totalEnemies = enemies.length;
+    enemyDir = 1;
+  }
+
+  function resetGame(){
+    timeLeft = GAME_DURATION;
+    elapsed = 0;
+    stepTimer = 0;
+    player.x = W/2 - player.w/2;
+    missiles = [];
+    missileCooldown = 0;
+    baseEnemySpeed = 1.0;
+    initEnemies();
+    updateHud();
+  }
+
+  function updateHud(){
+    const alive = enemies.filter(e=>e.alive).length;
+    hudScore.textContent = 'CIBLES: ' + (totalEnemies - alive) + '/' + totalEnemies;
+    hudTimer.textContent = 'TEMPS: ' + Math.max(0, Math.ceil(timeLeft));
+  }
+
+  // ---------- INPUT ----------
+  window.addEventListener('keydown', (e)=>{
+    if (e.code === 'ArrowLeft') keys.left = true;
+    if (e.code === 'ArrowRight') keys.right = true;
+    if (e.code === 'Space'){
+      e.preventDefault();
+      if (state === STATE.START) { startGame(); }
+      else if (state === STATE.PLAYING) { keys.space = true; }
+      else if (state === STATE.WIN || state === STATE.LOSE) { startGame(); }
+    }
+    if (e.code === 'Enter'){
+      if (state === STATE.WIN || state === STATE.LOSE) startGame();
+    }
+  });
+  window.addEventListener('keyup', (e)=>{
+    if (e.code === 'ArrowLeft') keys.left = false;
+    if (e.code === 'ArrowRight') keys.right = false;
+    if (e.code === 'Space') keys.space = false;
+  });
+  btnStart.addEventListener('click', startGame);
+
+  function startGame(){
+    ensureAudio();
+    if (actx.state === 'suspended') actx.resume();
+    resetGame();
+    state = STATE.PLAYING;
+    overlay.classList.add('hidden');
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  function showEndOverlay(win){
+    state = win ? STATE.WIN : STATE.LOSE;
+    overlay.classList.remove('hidden');
+    overlay.querySelector('h1').textContent = win
+      ? 'BRAVO ! MISSION REUSSIE'
+      : 'GAME OVER';
+    overlay.querySelector('p').innerHTML = win
+      ? 'Tous les vaisseaux ennemis ont ete detruits a temps.<br>Voulez-vous rejouer ?'
+      : 'Le temps est ecoule, il restait des vaisseaux ennemis.<br>Ce n\'est que partie remise, voulez-vous rejouer ?';
+    btnStart.textContent = 'REJOUER';
+    hintKey.textContent = '( ou appuyez sur ESPACE / ENTREE )';
+  }
+
+  // ---------- UPDATE ----------
+  function shoot(){
+    if (missileCooldown > 0) return;
+    missiles.push({ x: player.x + player.w/2, y: player.y - 4 });
+    missileCooldown = 0.18;
+    playShoot();
+  }
+
+  function update(dt){
+    elapsed += dt;
+    timeLeft -= dt;
+
+    // player movement
+    if (keys.left) player.x -= player.speed;
+    if (keys.right) player.x += player.speed;
+    player.x = Math.max(4, Math.min(W - player.w - 4, player.x));
+
+    // shooting
+    if (missileCooldown > 0) missileCooldown -= dt;
+    if (keys.space) shoot();
+
+    // missiles
+    for (const m of missiles) m.y -= MISSILE_SPEED;
+    missiles = missiles.filter(m => m.y > -10);
+
+    // enemy speed accelerates over time
+    const speed = baseEnemySpeed + elapsed * 0.045;
+
+    // move enemy block
+    let hitEdge = false;
+    let minX = Infinity, maxX = -Infinity;
+    for (const en of enemies){
+      if (!en.alive) continue;
+      minX = Math.min(minX, en.x);
+      maxX = Math.max(maxX, en.x + en.w);
+    }
+    if (minX === Infinity) { minX = 0; maxX = W; } // no enemies left
+
+    if ((maxX >= W - 10 && enemyDir > 0) || (minX <= 10 && enemyDir < 0)){
+      hitEdge = true;
+    }
+    if (hitEdge) enemyDir *= -1;
+
+    const dx = enemyDir * speed;
+    for (const en of enemies){
+      if (en.alive) en.x += dx;
+    }
+
+    // enemy step sound, faster as speed increases
+    stepTimer -= dt;
+    if (stepTimer <= 0){
+      playEnemyStep();
+      const interval = Math.max(0.08, 0.5 - elapsed * 0.006);
+      stepTimer = interval;
+    }
+
+    // collisions
+    for (const m of missiles){
+      for (const en of enemies){
+        if (!en.alive) continue;
+        if (m.x > en.x && m.x < en.x + en.w && m.y > en.y && m.y < en.y + en.h){
+          en.alive = false;
+          m.y = -999; // mark for removal
+          playExplosion();
+        }
+      }
+    }
+    missiles = missiles.filter(m => m.y > -100);
+
+    updateHud();
+
+    const aliveCount = enemies.filter(e=>e.alive).length;
+    if (aliveCount === 0){
+      showEndOverlay(true);
+      return false;
+    }
+    if (timeLeft <= 0){
+      showEndOverlay(false);
+      return false;
+    }
+    return true;
+  }
+
+  // ---------- DRAW ----------
+  function drawPlayer(){
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(player.x + player.w/2, player.y);
+    ctx.lineTo(player.x, player.y + player.h);
+    ctx.lineTo(player.x + player.w, player.y + player.h);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawEnemies(){
+    ctx.fillStyle = '#fff';
+    for (const en of enemies){
+      if (!en.alive) continue;
+      ctx.beginPath();
+      ctx.moveTo(en.x, en.y);
+      ctx.lineTo(en.x + en.w, en.y);
+      ctx.lineTo(en.x + en.w/2, en.y + en.h);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function drawMissiles(){
+    ctx.fillStyle = '#fff';
+    for (const m of missiles){
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, 3, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    drawPlayer();
+    drawEnemies();
+    drawMissiles();
+
+    // ground line
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(0, H-20);
+    ctx.lineTo(W, H-20);
+    ctx.stroke();
+  }
+
+  // ---------- LOOP ----------
+  function loop(now){
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    if (state === STATE.PLAYING){
+      const keepGoing = update(dt);
+      draw();
+      if (keepGoing) requestAnimationFrame(loop);
+    }
+  }
+
+  // initial static draw
+  initEnemies();
+  draw();
+  updateHud();
+})();
+</script>
+</body>
+</html>
