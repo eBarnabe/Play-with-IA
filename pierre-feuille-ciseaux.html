@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pierre · Feuille · Ciseaux</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #0f172a;
+      --primary-text: #f8fafc;
+      --win: #10b981;
+      --lose: #f43f5e;
+      --draw: #f59e0b;
+      --radius: 1rem;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    header {
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    p.subtitle {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-top: 0.25rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .scoreboard {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .score {
+      text-align: center;
+      flex: 1;
+    }
+
+    .score-label {
+      font-size: 0.875rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .score-value {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-top: 0.125rem;
+    }
+
+    .score-badge {
+      background: #f1f5f9;
+      color: var(--muted);
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.25rem 0.5rem;
+      border-radius: 999px;
+    }
+
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+    }
+
+    .choice-btn {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.15s ease;
+      font: inherit;
+      color: var(--text);
+    }
+
+    .choice-btn:hover:not(:disabled) {
+      border-color: var(--primary);
+      background: #f8fafc;
+      transform: scale(1.03);
+    }
+
+    .choice-btn:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    .choice-btn:disabled {
+      opacity: 0.7;
+      cursor: wait;
+    }
+
+    .choice-icon {
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .choice-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .result-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .result-area {
+      min-height: 110px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+
+    .duel {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .duel-side {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .duel-icon {
+      width: 3.5rem;
+      height: 3.5rem;
+      border: 2px solid var(--border);
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--card);
+    }
+
+    .duel-icon svg {
+      width: 1.75rem;
+      height: 1.75rem;
+    }
+
+    .duel-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .result-badge {
+      margin-top: 0.75rem;
+      padding: 0.375rem 1rem;
+      border-radius: 999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .result-badge.win { background: #d1fae5; color: #065f46; }
+    .result-badge.lose { background: #ffe4e6; color: #9f1239; }
+    .result-badge.draw { background: #fef3c7; color: #92400e; }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .history-title {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .reset-btn {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem;
+      border-radius: 0.375rem;
+    }
+
+    .reset-btn:hover {
+      background: #f1f5f9;
+    }
+
+    .history-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.625rem;
+      font-size: 0.875rem;
+    }
+
+    .history-dot {
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+
+    .history-dot.win { background: var(--win); }
+    .history-dot.lose { background: var(--lose); }
+    .history-dot.draw { background: var(--draw); }
+
+    .muted { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Pierre · Feuille · Ciseaux</h1>
+      <p class="subtitle">Choisissez un signe et affrontez l'ordinateur.</p>
+    </header>
+
+    <section class="card">
+      <div class="scoreboard">
+        <div class="score">
+          <div class="score-label">Vous</div>
+          <div class="score-value" id="player-score">0</div>
+        </div>
+        <span class="score-badge">Score</span>
+        <div class="score">
+          <div class="score-label">Ordinateur</div>
+          <div class="score-value" id="computer-score">0</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="choices" id="choices">
+      <button class="choice-btn" data-choice="rock" aria-label="Pierre">
+        <svg class="choice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+        <span class="choice-label">Pierre</span>
+      </button>
+      <button class="choice-btn" data-choice="paper" aria-label="Feuille">
+        <svg class="choice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span class="choice-label">Feuille</span>
+      </button>
+      <button class="choice-btn" data-choice="scissors" aria-label="Ciseaux">
+        <svg class="choice-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+        <span class="choice-label">Ciseaux</span>
+      </button>
+    </section>
+
+    <section class="card">
+      <div class="result-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        Résultat
+      </div>
+      <div class="result-area" id="result-area">
+        Faites votre premier choix pour commencer.
+      </div>
+    </section>
+
+    <section class="card" id="history-card" style="display: none;">
+      <div class="history-header">
+        <span class="history-title">Historique</span>
+        <button class="reset-btn" id="reset-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+          Réinitialiser
+        </button>
+      </div>
+      <ul class="history-list" id="history-list"></ul>
+    </section>
+  </main>
+
+  <script>
+    const choices = [
+      { id: 'rock', label: 'Pierre', beats: 'scissors' },
+      { id: 'paper', label: 'Feuille', beats: 'rock' },
+      { id: 'scissors', label: 'Ciseaux', beats: 'paper' }
+    ];
+
+    const icons = {
+      rock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>',
+      paper: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+      scissors: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>'
+    };
+
+    let history = [];
+    let isPlaying = false;
+
+    const resultArea = document.getElementById('result-area');
+    const historyCard = document.getElementById('history-card');
+    const historyList = document.getElementById('history-list');
+    const playerScoreEl = document.getElementById('player-score');
+    const computerScoreEl = document.getElementById('computer-score');
+    const choiceButtons = document.querySelectorAll('.choice-btn');
+
+    function getComputerChoice() {
+      const ids = ['rock', 'paper', 'scissors'];
+      return ids[Math.floor(Math.random() * ids.length)];
+    }
+
+    function getResult(player, computer) {
+      if (player === computer) return 'draw';
+      const playerChoice = choices.find(c => c.id === player);
+      return playerChoice.beats === computer ? 'win' : 'lose';
+    }
+
+    function updateScores() {
+      const stats = history.reduce((acc, round) => {
+        if (round.result === 'win') acc.wins++;
+        else if (round.result === 'lose') acc.losses++;
+        else acc.draws++;
+        return acc;
+      }, { wins: 0, losses: 0, draws: 0 });
+      playerScoreEl.textContent = stats.wins;
+      computerScoreEl.textContent = stats.losses;
+    }
+
+    function renderResult(round) {
+      const labels = { win: 'Victoire !', lose: 'Défaite', draw: 'Égalité' };
+      resultArea.innerHTML = `
+        <div class="duel">
+          <div class="duel-side">
+            <div class="duel-icon">${icons[round.player]}</div>
+            <span class="duel-label">Vous</span>
+          </div>
+          <span class="muted">VS</span>
+          <div class="duel-side">
+            <div class="duel-icon">${icons[round.computer]}</div>
+            <span class="duel-label">Ordinateur</span>
+          </div>
+        </div>
+        <span class="result-badge ${round.result}">${labels[round.result]}</span>
+      `;
+    }
+
+    function renderHistory() {
+      if (history.length === 0) {
+        historyCard.style.display = 'none';
+        return;
+      }
+      historyCard.style.display = 'block';
+      historyList.innerHTML = history.slice(0, 8).map(round => {
+        const playerLabel = choices.find(c => c.id === round.player).label;
+        const computerLabel = choices.find(c => c.id === round.computer).label;
+        const dotLabel = round.result === 'win' ? 'V' : round.result === 'lose' ? 'D' : 'N';
+        return `
+          <li class="history-item">
+            <span>${playerLabel}</span>
+            <span class="history-dot ${round.result}">${dotLabel}</span>
+            <span class="muted">${computerLabel}</span>
+          </li>
+        `;
+      }).join('');
+    }
+
+    function play(player) {
+      if (isPlaying) return;
+      isPlaying = true;
+      choiceButtons.forEach(btn => btn.disabled = true);
+      resultArea.innerHTML = 'L\'ordinateur choisit…';
+
+      setTimeout(() => {
+        const computer = getComputerChoice();
+        const result = getResult(player, computer);
+        const round = { player, computer, result };
+        history.unshift(round);
+        renderResult(round);
+        updateScores();
+        renderHistory();
+        isPlaying = false;
+        choiceButtons.forEach(btn => btn.disabled = false);
+      }, 400);
+    }
+
+    choiceButtons.forEach(btn => {
+      btn.addEventListener('click', () => play(btn.dataset.choice));
+    });
+
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      history = [];
+      isPlaying = false;
+      choiceButtons.forEach(btn => btn.disabled = false);
+      resultArea.innerHTML = 'Faites votre premier choix pour commencer.';
+      updateScores();
+      renderHistory();
+    });
+  </script>
+</body>
+</html>
