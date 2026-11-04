@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>LABYRINTHE // A vers B</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #c9b78a;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    color: #3f2f1f;
+  }
+  #wrap {
+    position: relative;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 6px #7a5c33;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    background: #e8d5a8;
+  }
+  .hud {
+    position: absolute;
+    top: 10px; left: 0; right: 0;
+    display: flex; justify-content: space-between;
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: bold;
+    pointer-events: none;
+    color: #3f2f1f;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+  }
+  #overlay {
+    position: absolute; top:0; left:0; right:0; bottom:0;
+    background: rgba(60, 45, 25, 0.55);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    gap: 16px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 {
+    margin: 0;
+    font-size: 28px;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  }
+  #overlay p {
+    margin: 0;
+    font-size: 14px;
+    color: #fff;
+    max-width: 380px;
+    line-height: 1.6;
+  }
+  #overlay button {
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: bold;
+    background: #c1440e;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 22px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #8c3009;
+  }
+  #overlay button:active { transform: translateY(2px); box-shadow: none; }
+  #controls {
+    position: absolute;
+    bottom: 10px; left: 0; right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: #3f2f1f;
+    opacity: 0.75;
+    pointer-events: none;
+  }
+  #btn-new {
+    position: absolute;
+    top: 8px; right: 12px;
+    font-family: inherit;
+    font-size: 12px;
+    background: #5b8c3e;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    box-shadow: 0 2px 0 #3f6a2b;
+  }
+  #btn-new:active { transform: translateY(1px); box-shadow: none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="680" height="480"></canvas>
+  <div class="hud">
+    <span id="hud-moves">DEPLACEMENTS : 0</span>
+    <span id="hud-status">EN ROUTE VERS B</span>
+  </div>
+  <div id="controls">Fleches directionnelles pour se deplacer</div>
+  <div id="overlay">
+    <h1>LABYRINTHE</h1>
+    <p>
+      Guidez le petit carre rouge du point A au point B.<br>
+      Votre chemin laisse une trace en pointilles pour vous reperer.
+    </p>
+    <button id="btn-start">COMMENCER</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const COLS = 17, ROWS = 12;
+  const CELL = Math.min(W/COLS, H/ROWS);
+  const OFFSET_X = (W - COLS*CELL) / 2;
+  const OFFSET_Y = (H - ROWS*CELL) / 2;
+
+  const overlay = document.getElementById('overlay');
+  const btnStart = document.getElementById('btn-start');
+  const btnNewWrap = document.createElement('button');
+  btnNewWrap.id = 'btn-new';
+  btnNewWrap.textContent = 'NOUVEAU LABYRINTHE';
+  document.getElementById('wrap').appendChild(btnNewWrap);
+
+  const hudMoves = document.getElementById('hud-moves');
+  const hudStatus = document.getElementById('hud-status');
+
+  const COLOR_WALL = '#3f6a2b';
+  const COLOR_WALL_FILL = '#5b8c3e';
+  const COLOR_SAND = '#e8d5a8';
+  const COLOR_TRAIL = '#8a5a2b';
+  const COLOR_PLAYER = '#e63946';
+  const COLOR_PLAYER_DARK = '#b3202c';
+
+  // ---------- AUDIO ----------
+  let actx = null;
+  function ensureAudio(){
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+  }
+
+  let stepToggle = false;
+  function playStepBeep(){
+    if (!actx) return;
+    stepToggle = !stepToggle;
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(stepToggle ? 620 : 560, actx.currentTime);
+    gain.gain.setValueAtTime(0.08, actx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.09);
+    osc.connect(gain).connect(actx.destination);
+    osc.start();
+    osc.stop(actx.currentTime + 0.09);
+  }
+
+  function playWinChime(){
+    if (!actx) return;
+    [523, 659, 784].forEach((freq, i)=>{
+      const osc = actx.createOscillator();
+      const gain = actx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, actx.currentTime + i*0.12);
+      gain.gain.setValueAtTime(0.12, actx.currentTime + i*0.12);
+      gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + i*0.12 + 0.3);
+      osc.connect(gain).connect(actx.destination);
+      osc.start(actx.currentTime + i*0.12);
+      osc.stop(actx.currentTime + i*0.12 + 0.3);
+    });
+  }
+
+  let grid = [];
+  let playerCell = {c:0, r:0};
+  let goalCell = {c:COLS-1, r:ROWS-1};
+  let path = [];
+  let moves = 0;
+  let playing = false;
+
+  function idx(c, r){ return r*COLS + c; }
+
+  function makeGrid(){
+    const g = [];
+    for (let r=0;r<ROWS;r++){
+      for (let c=0;c<COLS;c++){
+        g.push({ c, r, visited:false, N:true, S:true, E:true, W:true });
+      }
+    }
+    return g;
+  }
+
+  function neighbors(cell){
+    const list = [];
+    if (cell.r > 0) list.push({dir:'N', opp:'S', cell: grid[idx(cell.c, cell.r-1)]});
+    if (cell.r < ROWS-1) list.push({dir:'S', opp:'N', cell: grid[idx(cell.c, cell.r+1)]});
+    if (cell.c > 0) list.push({dir:'W', opp:'E', cell: grid[idx(cell.c-1, cell.r)]});
+    if (cell.c < COLS-1) list.push({dir:'E', opp:'W', cell: grid[idx(cell.c+1, cell.r)]});
+    return list;
+  }
+
+  function generateMaze(){
+    grid = makeGrid();
+    const stack = [];
+    let current = grid[idx(0,0)];
+    current.visited = true;
+    stack.push(current);
+
+    while (stack.length){
+      current = stack[stack.length - 1];
+      const unvisited = neighbors(current).filter(n => !n.cell.visited);
+      if (unvisited.length === 0){
+        stack.pop();
+        continue;
+      }
+      const pick = unvisited[Math.floor(Math.random() * unvisited.length)];
+      current[pick.dir] = false;
+      pick.cell[pick.opp] = false;
+      pick.cell.visited = true;
+      stack.push(pick.cell);
+    }
+  }
+
+  function resetPlayer(){
+    playerCell = {c:0, r:0};
+    goalCell = {c: COLS-1, r: ROWS-1};
+    path = [cellCenter(playerCell)];
+    moves = 0;
+    updateHud();
+  }
+
+  function cellCenter(cell){
+    return {
+      x: OFFSET_X + cell.c*CELL + CELL/2,
+      y: OFFSET_Y + cell.r*CELL + CELL/2
+    };
+  }
+
+  function updateHud(){
+    hudMoves.textContent = 'DEPLACEMENTS : ' + moves;
+    hudStatus.textContent = playing ? 'EN ROUTE VERS B' : '';
+  }
+
+  function newMaze(){
+    generateMaze();
+    resetPlayer();
+    draw();
+  }
+
+  // ---------- INPUT ----------
+  const DIR_KEYS = {
+    ArrowUp: 'N', ArrowDown: 'S', ArrowLeft: 'W', ArrowRight: 'E'
+  };
+
+  window.addEventListener('keydown', (e)=>{
+    if (!playing) return;
+    const dir = DIR_KEYS[e.code === 'ArrowUp' || e.code==='ArrowDown' || e.code==='ArrowLeft' || e.code==='ArrowRight' ? e.code : null];
+    if (!dir) return;
+    e.preventDefault();
+    tryMove(dir);
+  });
+
+  function tryMove(dir){
+    const cell = grid[idx(playerCell.c, playerCell.r)];
+    if (cell[dir]) return; // wall blocks
+
+    let {c, r} = playerCell;
+    if (dir === 'N') r -= 1;
+    if (dir === 'S') r += 1;
+    if (dir === 'W') c -= 1;
+    if (dir === 'E') c += 1;
+
+    playerCell = {c, r};
+    moves++;
+    path.push(cellCenter(playerCell));
+    playStepBeep();
+    updateHud();
+    draw();
+
+    if (c === goalCell.c && r === goalCell.r){
+      winGame();
+    }
+  }
+
+  function winGame(){
+    playing = false;
+    playWinChime();
+    overlay.classList.remove('hidden');
+    overlay.querySelector('h1').textContent = 'BRAVO !';
+    overlay.querySelector('p').innerHTML = 'Vous avez trouve la sortie en ' + moves + ' deplacements.<br>Voulez-vous explorer un nouveau labyrinthe ?';
+    btnStart.textContent = 'NOUVEAU LABYRINTHE';
+  }
+
+  btnStart.addEventListener('click', ()=>{
+    ensureAudio();
+    newMaze();
+    playing = true;
+    overlay.classList.add('hidden');
+    updateHud();
+  });
+
+  btnNewWrap.addEventListener('click', ()=>{
+    ensureAudio();
+    newMaze();
+    playing = true;
+    overlay.classList.add('hidden');
+    updateHud();
+  });
+
+  // ---------- DRAW ----------
+  function drawBackground(){
+    ctx.fillStyle = COLOR_SAND;
+    ctx.fillRect(0,0,W,H);
+    // subtle texture dots
+    ctx.fillStyle = 'rgba(120,95,55,0.06)';
+    for (let i=0;i<160;i++){
+      const x = (i * 97) % W;
+      const y = (i * 53) % H;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+
+  function drawWalls(){
+    ctx.strokeStyle = COLOR_WALL;
+    ctx.fillStyle = COLOR_WALL_FILL;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+
+    for (const cell of grid){
+      const x0 = OFFSET_X + cell.c*CELL;
+      const y0 = OFFSET_Y + cell.r*CELL;
+      const x1 = x0 + CELL;
+      const y1 = y0 + CELL;
+
+      ctx.beginPath();
+      if (cell.N){ ctx.moveTo(x0,y0); ctx.lineTo(x1,y0); }
+      if (cell.W){ ctx.moveTo(x0,y0); ctx.lineTo(x0,y1); }
+      if (cell.r === ROWS-1 && cell.S){ ctx.moveTo(x0,y1); ctx.lineTo(x1,y1); }
+      if (cell.c === COLS-1 && cell.E){ ctx.moveTo(x1,y0); ctx.lineTo(x1,y1); }
+      ctx.stroke();
+    }
+  }
+
+  function drawMarkers(){
+    const a = cellCenter({c:0,r:0});
+    const b = cellCenter(goalCell);
+
+    ctx.font = 'bold ' + Math.floor(CELL*0.5) + 'px "Trebuchet MS", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.fillStyle = 'rgba(91,140,62,0.35)';
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, CELL*0.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#2f4d1f';
+    ctx.fillText('A', a.x, a.y);
+
+    ctx.fillStyle = 'rgba(198,40,40,0.18)';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, CELL*0.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#7a1c1c';
+    ctx.fillText('B', b.x, b.y);
+  }
+
+  function drawTrail(){
+    if (path.length < 2) return;
+    ctx.strokeStyle = COLOR_TRAIL;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([2, 8]);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for (let i=1;i<path.length;i++){
+      ctx.lineTo(path[i].x, path[i].y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawPlayer(){
+    const p = cellCenter(playerCell);
+    const size = CELL * 0.45;
+    ctx.fillStyle = COLOR_PLAYER_DARK;
+    ctx.fillRect(p.x - size/2 + 2, p.y - size/2 + 3, size, size);
+    ctx.fillStyle = COLOR_PLAYER;
+    ctx.fillRect(p.x - size/2, p.y - size/2, size, size);
+  }
+
+  function draw(){
+    drawBackground();
+    drawWalls();
+    drawMarkers();
+    drawTrail();
+    drawPlayer();
+  }
+
+  // ---------- INIT ----------
+  generateMaze();
+  resetPlayer();
+  draw();
+})();
+</script>
+</body>
+</html>
